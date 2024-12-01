@@ -1,13 +1,15 @@
 #!/usr/bin/env node
 
-// TODO: encrypt private key before writing to (and decrypt upon read from)
-// disk.
+// TODO: consider the security of the private key. can't someone just view the
+// decrypted file contents by eg adding a console.log statement of the right
+// variable?
 
 // TODO: allow user to specify a key file to use instead of the default of
 // $HOME/sol-wallet.key
 
 // TODO: add some automated tests
 
+import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import os from "node:os";
 import process from "node:process";
@@ -25,8 +27,10 @@ process.setSourceMapsEnabled(true);
 
 import { InvalidArgumentError, program } from "commander";
 import web3 from "@solana/web3.js";
+import prompts from "prompts";
 
 const keyfile = os.homedir() + "/sol-wallet.key";
+const keyFileCryptoAlgo = "aes-256-ctr";
 
 program.name("sol-wallet");
 
@@ -79,8 +83,31 @@ function addressToPubKey(address: string): web3.PublicKey {
 
 async function generate() {
   const keypair = web3.Keypair.generate();
+  const keyFilePassword = (
+    await prompts({
+      type: "password",
+      name: "password",
+      message: "Please enter a wallet password:",
+    })
+  ).password as string;
+  const hashedPassword = crypto
+    .createHash("sha256")
+    .update(keyFilePassword)
+    .digest("base64")
+    .slice(0, 32);
+  const initVector = crypto.randomBytes(16);
+  const cipher = crypto.createCipheriv(
+    keyFileCryptoAlgo,
+    hashedPassword,
+    initVector,
+  );
+  const encryptedSecretKey = Buffer.concat([
+    initVector,
+    cipher.update(keypair.secretKey),
+    cipher.final(),
+  ]);
   try {
-    await fs.writeFile(keyfile, keypair.secretKey, {
+    await fs.writeFile(keyfile, encryptedSecretKey, {
       flag: "wx",
     });
   } catch (err) {
@@ -90,7 +117,7 @@ async function generate() {
 }
 
 async function readKeypair(): Promise<web3.Keypair> {
-  const secretKey = await (async () => {
+  const keyFileContents = await (async () => {
     try {
       return await fs.readFile(keyfile);
     } catch (err) {
@@ -104,6 +131,40 @@ async function readKeypair(): Promise<web3.Keypair> {
           "Key file does not exist. Consider using the generate command to create one.",
         );
       }
+      throw err;
+    }
+  })();
+  const keyFilePassword = (
+    await prompts({
+      type: "password",
+      name: "password",
+      message: "Please enter the wallet password:",
+    })
+  ).password as string;
+  const hashedPassword = crypto
+    .createHash("sha256")
+    .update(keyFilePassword)
+    .digest("base64")
+    .slice(0, 32);
+  const secretKey = (() => {
+    try {
+      // decrypt the contents of the file
+      const initVector = keyFileContents.subarray(0, 16);
+      const encrypted = keyFileContents.subarray(16);
+      const decipher = crypto.createDecipheriv(
+        keyFileCryptoAlgo,
+        hashedPassword,
+        initVector,
+      );
+      return Buffer.concat([
+        decipher.update(Buffer.from(encrypted)),
+        decipher.final(),
+      ]);
+    } catch (err) {
+      console.error(
+        "Failed to decrypt private key from the contents of the file at",
+        keyfile,
+      );
       throw err;
     }
   })();
