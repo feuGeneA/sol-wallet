@@ -1,10 +1,5 @@
 #!/usr/bin/env node
 
-// TODO: import web3js as web3, not each thing from it
-
-// TODO: don't throw (non-commander) errors from top level command actions,
-// just console.error and quit.
-
 // TODO: encrypt private key before writing to (and decrypt upon read from)
 // disk.
 
@@ -29,15 +24,7 @@ import "source-map-support/register.js";
 process.setSourceMapsEnabled(true);
 
 import { InvalidArgumentError, program } from "commander";
-import {
-  Connection,
-  Keypair,
-  LAMPORTS_PER_SOL,
-  PublicKey,
-  SystemProgram,
-  Transaction,
-  sendAndConfirmTransaction,
-} from "@solana/web3.js";
+import web3 from "@solana/web3.js";
 
 const keyfile = os.homedir() + "/sol-wallet.key";
 
@@ -76,10 +63,10 @@ function validateRpcUrl(rpcUrl: string) {
   return rpcUrl;
 }
 
-function addressToPubKey(address: string): PublicKey {
+function addressToPubKey(address: string): web3.PublicKey {
   try {
-    const pubKey = new PublicKey(address);
-    if (!PublicKey.isOnCurve(pubKey)) {
+    const pubKey = new web3.PublicKey(address);
+    if (!web3.PublicKey.isOnCurve(pubKey)) {
       throw new InvalidArgumentError(`'${address}' is not on the curve`);
     }
     return pubKey;
@@ -91,7 +78,7 @@ function addressToPubKey(address: string): PublicKey {
 }
 
 async function generate() {
-  const keypair = Keypair.generate();
+  const keypair = web3.Keypair.generate();
   try {
     await fs.writeFile(keyfile, keypair.secretKey, {
       flag: "wx",
@@ -102,7 +89,7 @@ async function generate() {
   }
 }
 
-async function readKeypair(): Promise<Keypair> {
+async function readKeypair(): Promise<web3.Keypair> {
   const secretKey = await (async () => {
     try {
       return await fs.readFile(keyfile);
@@ -121,7 +108,7 @@ async function readKeypair(): Promise<Keypair> {
     }
   })();
   try {
-    return Keypair.fromSecretKey(secretKey);
+    return web3.Keypair.fromSecretKey(secretKey);
   } catch (err) {
     console.error(
       "Failed to create keypair from the contents of the file at",
@@ -138,25 +125,25 @@ async function address() {
 
 async function balance(options: { rpc: string }) {
   const pubKey = (await readKeypair()).publicKey;
-  const connection = new Connection(options.rpc);
+  const connection = new web3.Connection(options.rpc);
   console.log(await connection.getBalance(pubKey));
 }
 
 async function sendSol(options: {
   rpc: string;
-  to: PublicKey;
+  to: web3.PublicKey;
   amount: number;
 }) {
   const keypair = await readKeypair();
-  const connection = new Connection(options.rpc);
+  const connection = new web3.Connection(options.rpc);
 
-  const tx = new Transaction();
+  const tx = new web3.Transaction();
   const fromPubkey = keypair.publicKey;
   const toPubkey = options.to;
-  const lamports = LAMPORTS_PER_SOL * options.amount;
-  tx.add(SystemProgram.transfer({ fromPubkey, toPubkey, lamports }));
+  const lamports = web3.LAMPORTS_PER_SOL * options.amount;
+  tx.add(web3.SystemProgram.transfer({ fromPubkey, toPubkey, lamports }));
 
-  await sendAndConfirmTransaction(connection, tx, [keypair]);
+  await web3.sendAndConfirmTransaction(connection, tx, [keypair]);
 }
 
 program.parse();
