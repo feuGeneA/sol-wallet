@@ -10,8 +10,7 @@
   "scripts": {
     "build": "tsc",
     "lint": "eslint src",
-    "fix": "eslint --fix src",
-    "test": "mocha"
+    "fix": "eslint --fix src"
   },
   "keywords": [
     "Solana"
