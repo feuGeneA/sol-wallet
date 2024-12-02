@@ -7,7 +7,7 @@
 // TODO: reconsider the hashing of the wallet password. i blindly followed an
 // example somewhere, but since we're not storing that password anywhere
 // there's probably no reason to be hashing it, so we can probably just use the
-// user input directly as the asymmetric key to the file encryption.
+// user input directly as the symmetric key to the file encryption.
 
 // TODO: allow user to specify a key file to use instead of the default of
 // $HOME/sol-wallet.key
